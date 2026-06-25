@@ -2,11 +2,37 @@
 
 Stack de producción:
 
-| Capa | Plataforma | Repositorio |
-|------|------------|-------------|
-| Frontend (React + Vite) | [Vercel](https://vercel.com/) | `core_caja_piura` |
-| Backend (FastAPI) | [Koyeb](https://www.koyeb.com/) | `Dockerfile` en la raíz |
-| Base de datos (PostgreSQL) | [Neon](https://neon.com/) | Conexión vía `DATABASE_URL` |
+| Capa | Plataforma |
+|------|------------|
+| Frontend (React + Vite) | [Vercel](https://vercel.com/) |
+| Backend (FastAPI) | [Render](https://render.com/) (plan free) |
+| Base de datos (PostgreSQL) | [Neon](https://neon.com/) |
+
+**Producción:** https://core-caja-piura.vercel.app
+
+El portal usa `VITE_API_URL` → API en Render. En local, sin esa variable, sigue usando Firebase.
+
+## Despliegue rápido Render (Blueprint)
+
+1. Abre: https://render.com/deploy?repo=https://github.com/Pierox123274/core_caja_piura
+2. Conecta GitHub y autoriza Render
+3. En variables de entorno del servicio `caja-piura-api`, pega tu `DATABASE_URL` de Neon
+4. Añade `DNI_API_TOKEN` (opcional)
+5. Deploy → copia la URL del servicio (ej. `https://caja-piura-api.onrender.com`)
+6. En Vercel → Settings → Environment Variables → `VITE_API_URL` = URL de Render
+7. Redeploy Vercel
+
+## Neon — connection string
+
+En [console.neon.tech](https://console.neon.tech) → proyecto `caja-piura-core` → Connection string (pooled).
+
+## Credenciales demo
+
+| Código | Clave |
+|--------|--------|
+| `100245` | `demo1234` |
+| `900001` | `demo1234` |
+
 
 El código ya está en GitHub: https://github.com/Pierox123274/core_caja_piura
 

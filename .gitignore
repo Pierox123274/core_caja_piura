@@ -5,3 +5,5 @@ dist
 .vite
 backend/__pycache__
 **/__pycache__
+.vercel
+.env*
