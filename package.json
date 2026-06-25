@@ -1,0 +1,23 @@
+{
+  "name": "caja-piura-core-caja-piura",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Caja Piura — Portal Core (fuerza de ventas web). Conecta a Firebase Firestore compartido con app_clientes y app_fuerza_ventas.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "firebase": "^11.2.0",
+    "lucide-react": "^0.469.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.28.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "vite": "^6.0.5"
+  }
+}
