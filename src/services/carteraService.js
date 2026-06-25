@@ -11,6 +11,7 @@ import {
 } from 'firebase/firestore'
 import { db } from '../firebase/config.js'
 import { requireUser } from './authService.js'
+import { api, useApi } from './apiClient.js'
 
 function fechaKey(d = new Date()) {
   const y = d.getFullYear()
@@ -24,8 +25,8 @@ async function fetchCliente(clienteId) {
   return snap.exists() ? snap.data() : null
 }
 
-/** Incorpora solicitudes `enviado` del canal cliente a cartera del día (igual que Flutter). */
 export async function syncEnviadasACartera() {
+  if (useApi()) return 0
   const user = requireUser()
   const q = query(
     collection(db, 'solicitudes_credito'),
@@ -63,6 +64,10 @@ export async function syncEnviadasACartera() {
 }
 
 export async function listarCartera(fecha) {
+  if (useApi()) {
+    const q = fecha ? `?fecha=${encodeURIComponent(fecha)}` : ''
+    return api(`/api/cartera${q}`)
+  }
   const user = requireUser()
   await syncEnviadasACartera()
   const f = fecha || fechaKey()
@@ -97,6 +102,12 @@ export async function listarCartera(fecha) {
 }
 
 export async function marcarVisita(carteraId, { resultado, observacion }) {
+  if (useApi()) {
+    return api(`/api/cartera/${carteraId}/visita`, {
+      method: 'PATCH',
+      body: JSON.stringify({ resultado, observacion }),
+    })
+  }
   await updateDoc(doc(db, 'cartera_diaria', carteraId), {
     estado_visita: resultado === 'visitado' ? 'visitado' : resultado,
     resultado_visita: resultado,

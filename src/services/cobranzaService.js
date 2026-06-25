@@ -1,9 +1,10 @@
 import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore'
 import { db } from '../firebase/config.js'
 import { requireUser } from './authService.js'
+import { api, useApi } from './apiClient.js'
 
-/** Cartera vencida / mora — créditos vigentes con saldo > 0 del asesor. */
 export async function listarMora() {
+  if (useApi()) return api('/api/cobranza/mora')
   requireUser()
   const snap = await getDocs(
     query(collection(db, 'creditos'), where('estado', '==', 'vigente')),
@@ -28,6 +29,8 @@ export async function listarMora() {
 }
 
 export async function registrarAccion(payload) {
-  // Registro demo — en producción iría a colección cobranza_gestiones
+  if (useApi()) {
+    return api('/api/cobranza/accion', { method: 'POST', body: JSON.stringify(payload) })
+  }
   return { ok: true, ...payload, at: new Date().toISOString() }
 }

@@ -1,7 +1,9 @@
 import { doc, getDoc, getDocs, collection, query, where } from 'firebase/firestore'
 import { db } from '../firebase/config.js'
+import { api, useApi } from './apiClient.js'
 
 export async function obtenerFicha(clienteId) {
+  if (useApi()) return api(`/api/clientes/${clienteId}/ficha`)
   const clienteSnap = await getDoc(doc(db, 'clientes', clienteId))
   if (!clienteSnap.exists()) throw new Error('Cliente no encontrado')
   const c = clienteSnap.data()
@@ -24,6 +26,7 @@ export async function obtenerFicha(clienteId) {
     negocio: c.negocio,
     ingreso_mensual: c.ingreso_mensual,
     gasto_mensual: c.gasto_mensual,
+    calificacion_sbs: c.calificacion_sbs || 'NORMAL',
     creditos,
     solicitudes: solSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
     deuda_total: creditos.reduce((a, cr) => a + (cr.saldo_capital || 0), 0),

@@ -5,10 +5,10 @@ import {
 } from 'firebase/auth'
 import { doc, getDoc } from 'firebase/firestore'
 import { auth, db } from '../firebase/config.js'
+import { api, setToken, useApi } from './apiClient.js'
 
 export const USER_KEY = 'cp_user'
 
-/** Misma convención que app_fuerza_ventas (SalesMockData.emailFromCodigo). */
 export function emailFromCodigo(codigo) {
   const c = String(codigo).trim()
   if (c === '900001') return 'supervisor@cajapiura.demo'
@@ -30,9 +30,20 @@ export function saveUser(user) {
 
 export function clearSession() {
   localStorage.removeItem(USER_KEY)
+  setToken(null)
 }
 
 export async function login(codigoEmpleado, password) {
+  if (useApi()) {
+    const { user, token } = await api('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ codigo: codigoEmpleado, password }),
+    })
+    saveUser(user)
+    setToken(token)
+    return { user, token }
+  }
+
   const email = emailFromCodigo(codigoEmpleado)
   const cred = await signInWithEmailAndPassword(auth, email, password)
   const snap = await getDoc(doc(db, 'usuarios', cred.user.uid))
@@ -60,10 +71,34 @@ export async function login(codigoEmpleado, password) {
 
 export async function logout() {
   clearSession()
-  await fbSignOut(auth)
+  if (!useApi()) await fbSignOut(auth)
 }
 
 export function watchAuth(callback) {
+  if (useApi()) {
+    let cancelled = false
+    ;(async () => {
+      const stored = getStoredUser()
+      if (!stored) {
+        callback(null)
+        return
+      }
+      try {
+        const user = await api('/api/auth/me')
+        if (!cancelled) {
+          saveUser(user)
+          callback(user)
+        }
+      } catch {
+        clearSession()
+        if (!cancelled) callback(null)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }
+
   return onAuthStateChanged(auth, async (fbUser) => {
     if (!fbUser) {
       clearSession()

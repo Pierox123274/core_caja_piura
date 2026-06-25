@@ -1,8 +1,10 @@
 import { listarSolicitudes } from './solicitudesService.js'
 import { listarCartera } from './carteraService.js'
 import { requireUser } from './authService.js'
+import { api, useApi } from './apiClient.js'
 
 export async function productividad() {
+  if (useApi()) return api('/api/reportes/productividad')
   const user = requireUser()
   const solicitudes = await listarSolicitudes()
   const cartera = await listarCartera()

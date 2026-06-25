@@ -1,3 +1,5 @@
+import { api, useApi } from './apiClient.js'
+
 const BASE_URL =
   import.meta.env.VITE_DNI_API_BASE_URL || 'https://dniruc.apisperu.com/api/v1/dni'
 
@@ -12,13 +14,15 @@ function titleCase(value) {
     .join(' ')
 }
 
-/**
- * Consulta datos de persona por DNI (RENIEC vía apisperu.com).
- * @returns {{ dni: string, nombres: string, apellidos: string, nombreCompleto: string }}
- */
 export async function consultarDni(dni) {
   const clean = String(dni).replace(/\D/g, '')
   if (clean.length !== 8) throw new Error('El DNI debe tener 8 dígitos')
+
+  if (useApi()) {
+    const p = await api(`/api/dni/${clean}`)
+    return p
+  }
+
   if (!TOKEN) throw new Error('API DNI no configurada (VITE_DNI_API_TOKEN)')
 
   const res = await fetch(`${BASE_URL}/${clean}?token=${encodeURIComponent(TOKEN)}`)
