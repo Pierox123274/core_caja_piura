@@ -7,3 +7,6 @@ backend/__pycache__
 **/__pycache__
 .vercel
 .env*
+
+.firebase/
+NEON_DATABASE_URL.local.txt
