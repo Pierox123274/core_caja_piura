@@ -41,13 +41,15 @@ jobs:
       - name: Create Render service (free)
         id: render
         if: env.RENDER_API_KEY != '' && steps.neon.outputs.database_url != ''
+        env:
+          DATABASE_URL: ${{ steps.neon.outputs.database_url }}
         run: |
-          set -euo pipefail
+          set -uo pipefail
           OWNERS=$(curl -fsS https://api.render.com/v1/owners -H "Authorization: Bearer $RENDER_API_KEY")
           OWNER_ID=$(echo "$OWNERS" | jq -r '.[0].owner.id')
-          BODY=$(jq -n \
+          jq -n \
             --arg owner "$OWNER_ID" \
-            --arg db "${{ steps.neon.outputs.database_url }}" \
+            --arg db "$DATABASE_URL" \
             --arg jwt "${JWT_SECRET:-caja-piura-jwt-prod-2026}" \
             --arg dni "${DNI_API_TOKEN:-}" \
             '{
@@ -62,8 +64,9 @@ jobs:
                 {key:"CORS_ORIGINS", value:"https://core-caja-piura.vercel.app"},
                 {key:"JWT_SECRET", value:$jwt},
                 {key:"DNI_API_BASE_URL", value:"https://dniruc.apisperu.com/api/v1/dni"},
+                {key:"DNI_API_TOKEN", value:$dni},
                 {key:"PYTHON_VERSION", value:"3.12.8"}
-              ] + (if $dni != "" then [{key:"DNI_API_TOKEN", value:$dni}] else [] end),
+              ],
               serviceDetails: {
                 runtime: "python",
                 plan: "free",
@@ -74,12 +77,12 @@ jobs:
                   startCommand: "uvicorn backend.main:app --host 0.0.0.0 --port $PORT"
                 }
               }
-            }')
+            }' > /tmp/render_body.json
           HTTP=$(curl -sS -o /tmp/render_resp.json -w "%{http_code}" \
             -X POST https://api.render.com/v1/services \
             -H "Authorization: Bearer $RENDER_API_KEY" \
             -H "Content-Type: application/json" \
-            -d "$BODY")
+            -d @/tmp/render_body.json)
           if [ "$HTTP" = "201" ] || [ "$HTTP" = "200" ]; then
             URL=$(jq -r '.service.serviceDetails.url' /tmp/render_resp.json)
             echo "api_url=$URL" >> "$GITHUB_OUTPUT"
@@ -104,7 +107,7 @@ jobs:
           DATABASE_URL: ${{ steps.neon.outputs.database_url }}
           API_URL: ${{ steps.render.outputs.api_url || 'https://core-caja-piura.vercel.app' }}
         run: |
-          set -euo pipefail
+          set -uo pipefail
           npm i -g vercel@latest
           vercel pull --yes --environment=production --token "$VERCEL_TOKEN"
           echo "VITE_API_URL=$API_URL" > .env.production.local
