@@ -19,7 +19,6 @@
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.4",
-    "neonctl": "^2.27.1",
     "vite": "^6.0.5"
   }
 }

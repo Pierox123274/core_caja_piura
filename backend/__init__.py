@@ -1,1 +1,0 @@
-# Caja Piura backend package

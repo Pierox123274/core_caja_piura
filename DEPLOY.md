@@ -1,30 +1,36 @@
-# Despliegue en la nube — Caja Piura Core
+# Despliegue — Caja Piura Core
 
-Stack de producción:
+Stack **gratis** (sin tarjeta):
 
 | Capa | Plataforma |
 |------|------------|
-| Frontend (React + Vite) | [Vercel](https://vercel.com/) |
-| Backend (FastAPI) | [Render](https://render.com/) (plan free) |
-| Base de datos (PostgreSQL) | [Neon](https://neon.com/) |
+| Portal web (React) | [Firebase Hosting](https://firebase.google.com/docs/hosting) |
+| Base de datos | [Firebase Firestore](https://firebase.google.com/docs/firestore) (mismo proyecto que las apps Flutter) |
 
-**Producción:** https://core-caja-piura.vercel.app
+**Producción:** https://caja-piura-f0169.web.app
 
-El portal usa `VITE_API_URL` → API en Render. En local, sin esa variable, sigue usando Firebase.
+El portal usa **Firebase** directamente (sin API externa). Mismos datos que `app_clientes` y `app_fuerza_ventas`.
 
-## Despliegue rápido Render (Blueprint)
+---
 
-1. Abre: https://render.com/deploy?repo=https://github.com/Pierox123274/core_caja_piura
-2. Conecta GitHub y autoriza Render
-3. En variables de entorno del servicio `caja-piura-api`, pega tu `DATABASE_URL` de Neon
-4. Añade `DNI_API_TOKEN` (opcional)
-5. Deploy → copia la URL del servicio (ej. `https://caja-piura-api.onrender.com`)
-6. En Vercel → Settings → Environment Variables → `VITE_API_URL` = URL de Render
-7. Redeploy Vercel
+## Despliegue manual
 
-## Neon — connection string
+```bash
+cd core_caja_piura
+npm ci
+npm run build
+cd ..
+firebase deploy --only hosting --project caja-piura-f0169
+```
 
-En [console.neon.tech](https://console.neon.tech) → proyecto `caja-piura-core` → Connection string (pooled).
+## Despliegue automático (GitHub Actions)
+
+Cada push a `master` que toque `core_caja_piura/` despliega si existe el secret `FIREBASE_SERVICE_ACCOUNT` en el repo.
+
+Generar service account:
+1. [Firebase Console](https://console.firebase.google.com/) → proyecto `caja-piura-f0169` → Configuración → Cuentas de servicio
+2. Generar nueva clave privada (JSON)
+3. En GitHub → Settings → Secrets → `FIREBASE_SERVICE_ACCOUNT` = contenido del JSON
 
 ## Credenciales demo
 
@@ -33,125 +39,11 @@ En [console.neon.tech](https://console.neon.tech) → proyecto `caja-piura-core`
 | `100245` | `demo1234` |
 | `900001` | `demo1234` |
 
+## Local
 
-El código ya está en GitHub: https://github.com/Pierox123274/core_caja_piura
-
-En producción el portal usa **REST API** (`VITE_API_URL`). En local, sin esa variable, sigue usando **Firebase** como antes.
-
----
-
-## 1. Neon — PostgreSQL
-
-1. Crea cuenta en [neon.com](https://neon.com/) e inicia un proyecto (ej. `caja-piura`).
-2. En el panel, copia la **connection string** (modo *pooled*, recomendado para serverless/Koyeb):
-   ```
-   postgresql://usuario:password@ep-xxx.region.aws.neon.tech/neondb?sslmode=require
-   ```
-3. Guárdala como `DATABASE_URL` (la usarás en Koyeb).
-
-No hace falta crear tablas manualmente: el backend ejecuta `create_all` y **seed** de demo al arrancar.
-
----
-
-## 2. Koyeb — Backend FastAPI
-
-1. Entra en [Koyeb](https://app.koyeb.com/) → **Create App** → **GitHub** → repo `Pierox123274/core_caja_piura`.
-2. Tipo de build: **Dockerfile** (raíz del repo).
-3. Puerto: **8000** (HTTP).
-4. Variables de entorno:
-
-| Variable | Valor |
-|----------|--------|
-| `DATABASE_URL` | Connection string de Neon |
-| `JWT_SECRET` | Clave larga aleatoria (producción) |
-| `CORS_ORIGINS` | URL de Vercel (ej. `https://core-caja-piura.vercel.app`) |
-| `DNI_API_TOKEN` | Token apisperu.com (opcional) |
-| `DNI_API_BASE_URL` | `https://dniruc.apisperu.com/api/v1/dni` |
-| `PORT` | `8000` |
-
-5. Despliega y anota la URL pública, por ejemplo:
-   ```
-   https://caja-piura-api-xxxxx.koyeb.app
-   ```
-6. Verifica: `GET https://TU-API.koyeb.app/health` → `{"status":"ok"}`
-
-### Credenciales demo (API)
-
-| Código | Contraseña |
-|--------|------------|
-| `100245` | `demo1234` |
-| `900001` | `demo1234` |
-
----
-
-## 3. Vercel — Frontend
-
-1. Entra en [vercel.com/new](https://vercel.com/new) → importa `Pierox123274/core_caja_piura`.
-2. Framework: **Vite** (detectado automáticamente).
-3. Variables de entorno:
-
-| Variable | Valor |
-|----------|--------|
-| `VITE_API_URL` | URL de Koyeb (sin `/` final), ej. `https://caja-piura-api-xxxxx.koyeb.app` |
-
-No configures variables `VITE_FIREBASE_*` en producción si usas solo la API.
-
-4. Deploy → obtendrás una URL como `https://core-caja-piura.vercel.app`.
-
-5. Vuelve a Koyeb y actualiza `CORS_ORIGINS` con la URL real de Vercel si hace falta.
-
----
-
-## 4. CLI (opcional)
-
-### Vercel
 ```bash
 cd core_caja_piura
-npx vercel login
-npx vercel --prod
-npx vercel env add VITE_API_URL production
-```
-
-### Neon
-```bash
-npx neonctl auth
-npx neonctl projects create --name caja-piura
-npx neonctl connection-string
-```
-
-### Koyeb
-```bash
-# Instalar CLI: https://www.koyeb.com/docs/installation
-koyeb login
-koyeb app init caja-piura-api --docker Dockerfile --git github.com/Pierox123274/core_caja_piura
-```
-
----
-
-## Arquitectura
-
-```
-Usuario → Vercel (React)
-              ↓ VITE_API_URL
-         Koyeb (FastAPI)
-              ↓ DATABASE_URL
-         Neon (PostgreSQL)
-```
-
-Las apps Flutter (`app_clientes`, `app_fuerza_ventas`) **siguen usando Firebase**; solo el portal web usa Neon/Koyeb en producción cloud.
-
----
-
-## Desarrollo local con API
-
-```bash
-# Terminal 1 — Postgres local o Neon dev branch
-export DATABASE_URL=postgresql://...
-pip install -r backend/requirements.txt
-uvicorn backend.main:app --reload --port 8000
-
-# Terminal 2
-cp .env.example .env
-# VITE_API_URL=http://localhost:8000
 npm run dev
 ```
+
+Variables en `.env` (ver `.env.example`).
