@@ -1,0 +1,140 @@
+name: Deploy Production
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [master]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      JWT_SECRET: ${{ secrets.JWT_SECRET }}
+      DNI_API_TOKEN: ${{ secrets.DNI_API_TOKEN }}
+      NEON_PROJECT_ID: cool-bar-11094939
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Resolve Neon DATABASE_URL
+        id: neon
+        if: env.NEON_API_KEY != ''
+        run: |
+          set -euo pipefail
+          CONN=$(curl -fsS \
+            "https://console.neon.tech/api/v2/projects/${NEON_PROJECT_ID}/connection_uri?database_name=neondb&role_name=neondb_owner&pooled=true" \
+            -H "Authorization: Bearer $NEON_API_KEY")
+          DATABASE_URL=$(echo "$CONN" | jq -r '.uri')
+          echo "database_url=$DATABASE_URL" >> "$GITHUB_OUTPUT"
+
+      - name: Create Render service (free)
+        id: render
+        if: env.RENDER_API_KEY != '' && steps.neon.outputs.database_url != ''
+        run: |
+          set -euo pipefail
+          OWNERS=$(curl -fsS https://api.render.com/v1/owners -H "Authorization: Bearer $RENDER_API_KEY")
+          OWNER_ID=$(echo "$OWNERS" | jq -r '.[0].owner.id')
+          BODY=$(jq -n \
+            --arg owner "$OWNER_ID" \
+            --arg db "${{ steps.neon.outputs.database_url }}" \
+            --arg jwt "${JWT_SECRET:-caja-piura-jwt-prod-2026}" \
+            --arg dni "${DNI_API_TOKEN:-}" \
+            '{
+              type: "web_service",
+              name: "caja-piura-api",
+              ownerId: $owner,
+              repo: "https://github.com/Pierox123274/core_caja_piura",
+              branch: "master",
+              autoDeploy: "yes",
+              envVars: [
+                {key:"DATABASE_URL", value:$db},
+                {key:"CORS_ORIGINS", value:"https://core-caja-piura.vercel.app"},
+                {key:"JWT_SECRET", value:$jwt},
+                {key:"DNI_API_BASE_URL", value:"https://dniruc.apisperu.com/api/v1/dni"},
+                {key:"PYTHON_VERSION", value:"3.12.8"}
+              ] + (if $dni != "" then [{key:"DNI_API_TOKEN", value:$dni}] else [] end),
+              serviceDetails: {
+                runtime: "python",
+                plan: "free",
+                region: "oregon",
+                healthCheckPath: "/health",
+                envSpecificDetails: {
+                  buildCommand: "pip install -r backend/requirements.txt",
+                  startCommand: "uvicorn backend.main:app --host 0.0.0.0 --port $PORT"
+                }
+              }
+            }')
+          HTTP=$(curl -sS -o /tmp/render_resp.json -w "%{http_code}" \
+            -X POST https://api.render.com/v1/services \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "$BODY")
+          if [ "$HTTP" = "201" ] || [ "$HTTP" = "200" ]; then
+            URL=$(jq -r '.service.serviceDetails.url' /tmp/render_resp.json)
+            echo "api_url=$URL" >> "$GITHUB_OUTPUT"
+            echo "Render service created: $URL"
+          else
+            echo "Render create HTTP $HTTP (continuing with Vercel API fallback)"
+            cat /tmp/render_resp.json || true
+            SVC=$(curl -fsS "https://api.render.com/v1/services?limit=20" -H "Authorization: Bearer $RENDER_API_KEY" || echo "[]")
+            URL=$(echo "$SVC" | jq -r '.[] | select(.service.name=="caja-piura-api") | .service.serviceDetails.url' | head -1)
+            if [ -n "$URL" ] && [ "$URL" != "null" ]; then
+              echo "api_url=$URL" >> "$GITHUB_OUTPUT"
+              echo "Using existing Render service: $URL"
+            else
+              echo "api_url=https://core-caja-piura.vercel.app" >> "$GITHUB_OUTPUT"
+              echo "Using Vercel integrated API fallback"
+            fi
+          fi
+
+      - name: Configure Vercel env and deploy
+        if: env.VERCEL_TOKEN != ''
+        env:
+          DATABASE_URL: ${{ steps.neon.outputs.database_url }}
+          API_URL: ${{ steps.render.outputs.api_url || 'https://core-caja-piura.vercel.app' }}
+        run: |
+          set -euo pipefail
+          npm i -g vercel@latest
+          vercel pull --yes --environment=production --token "$VERCEL_TOKEN"
+          echo "VITE_API_URL=$API_URL" > .env.production.local
+          for pair in \
+            "DATABASE_URL=$DATABASE_URL" \
+            "JWT_SECRET=${JWT_SECRET:-caja-piura-jwt-prod-2026}" \
+            "CORS_ORIGINS=https://core-caja-piura.vercel.app" \
+            "DNI_API_BASE_URL=https://dniruc.apisperu.com/api/v1/dni" \
+            "DNI_API_TOKEN=${DNI_API_TOKEN:-}" \
+            "VITE_API_URL=$API_URL"; do
+            KEY="${pair%%=*}"
+            VAL="${pair#*=}"
+            [ -z "$VAL" ] && continue
+            printf '%s' "$VAL" | vercel env add "$KEY" production --force --token "$VERCEL_TOKEN"
+          done
+          vercel build --prod --token "$VERCEL_TOKEN"
+          vercel deploy --prebuilt --prod --token "$VERCEL_TOKEN"
+
+      - name: Wait for API health
+        if: steps.render.outputs.api_url != ''
+        run: |
+          URL="${{ steps.render.outputs.api_url }}"
+          for i in $(seq 1 30); do
+            RESP=$(curl -fsS "$URL/health" || true)
+            if echo "$RESP" | grep -q '"status"'; then
+              echo "API healthy at $URL — $RESP"
+              exit 0
+            fi
+            echo "Waiting for API... ($i/30) got: ${RESP:0:80}"
+            sleep 20
+          done
+          echo "API not healthy yet at $URL"
+          exit 1
